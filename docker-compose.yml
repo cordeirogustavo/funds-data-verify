@@ -1,0 +1,10 @@
+version: "3.8"
+
+services:
+  funds-verifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./application/documents:/app/application/documents
+    restart: "no"
