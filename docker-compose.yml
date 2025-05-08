@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      - MZ_IQ_FUNDS_DATA_URL=${MZ_IQ_FUNDS_DATA_URL}
+      - MZ_IQ_API_KEY=${MZ_IQ_API_KEY}
     volumes:
       - ./application/documents:/app/application/documents
     restart: "no"

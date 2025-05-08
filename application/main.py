@@ -13,7 +13,7 @@ import re
 import pandas as pd
 import requests
 from pathlib import Path
-
+from datetime import datetime
 
 class FundDataVerifier:
     """Process fund data and verify against external APIs."""
@@ -22,7 +22,7 @@ class FundDataVerifier:
     OUTPUT_PATH = Path("application/documents/planilha-validada.xlsx")
     
     FUNDSNET_API = "http://fnet.bmfbovespa.com.br/fnet/publico/pesquisarGerenciadorDocumentosDados"
-    MZIQ_API = f"{os.getenv('MZIQ_API')}/hash"
+    MZIQ_API = f"{os.getenv('MZ_IQ_FUNDS_DATA_URL')}/hash"
 
     def __init__(self):
         """Initialize the fund data verifier."""
@@ -47,18 +47,17 @@ class FundDataVerifier:
     def query_fundsnet(self, cnpj):
         """Query the FundsNet API for fund data."""
         if not cnpj or pd.isna(cnpj):
-            return None, None
+            return None, None, None
         try:
-            query = {"cnpj": cnpj, "cnpjFundo": cnpj, "idCategoria": 0, "idTipoDocumento": 0, "d": 1, "s": 0, "l": 10, "idEspecieDocumento": 0}
+            query = {"cnpj": cnpj, "cnpjFundo": cnpj, "idCategoria": 0, "idTipoDocumento": 0, "d": 2, "s": 0, "l": 10, "o[0][dataEntrega]": "desc", "idEspecieDocumento": 0}
             response = requests.get(self.FUNDSNET_API, params=query, timeout=10)
             if response.status_code == 200:
                 data = response.json().get("data", [])
                 if data and len(data) > 0:
                     fund_info = data[0]
-                    print(data)
-                    return fund_info.get("descricaoFundo"), fund_info.get("dataEntrega")
+                    return fund_info.get("descricaoFundo"), fund_info.get("dataEntrega"), fund_info.get("id")
             
-            return None, None
+            return None, None, None
         except Exception as e:
             print(f"Error querying FundsNet for CNPJ {cnpj}: {e}")
             return None, None
@@ -70,7 +69,7 @@ class FundDataVerifier:
             
         try:
             params = {"fundName": fund_name}
-            response = requests.get(self.MZIQ_API, params=params, timeout=10, headers={"mz-internal-app": os.getenv("MZIQ_APP_KEY")})
+            response = requests.get(self.MZIQ_API, params=params, timeout=10, headers={"mz-internal-app": os.getenv("MZ_IQ_API_KEY")})
             
             if response.status_code == 200:
                 data = response.json()
@@ -101,6 +100,7 @@ class FundDataVerifier:
         # Add new columns
         self.data["validado"] = False
         self.data["dataUltimoArquivamento"] = ""
+        self.data["externalId"] = ""
         self.data["idRedis"] = ""
         
         for idx, row in self.data.iterrows():
@@ -109,7 +109,7 @@ class FundDataVerifier:
             
             try:
                 # Query FundsNet
-                fund_name, last_delivery_date = self.query_fundsnet(cnpj)
+                fund_name, last_delivery_date, external_id = self.query_fundsnet(cnpj)
                 
                 if fund_name:
                     # Query MZiQ
@@ -119,7 +119,7 @@ class FundDataVerifier:
                     # Update dataframe
                     self.data.at[idx, "dataUltimoArquivamento"] = last_delivery_date
                     self.data.at[idx, "idRedis"] = fund_id if fund_id else ""
-                    
+                    self.data.at[idx, "externalId"] = external_id if external_id else ""
                     # Validate
                     normalized_cnpj = self.normalize_cnpj(cnpj)
                     print(f"Normalized CNPJ: {normalized_cnpj}")
